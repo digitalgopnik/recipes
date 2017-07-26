@@ -225,10 +225,46 @@ class InformationController extends AppController
             ]
         ]);
 
+        $this->loadModel('InformationZuKategorie');
+
+        $this->loadModel('ZutatenZuInformation');
+        $this->loadModel('ZubereitungZuInformation');
+        $this->loadModel('Zutaten');
+        $this->loadModel('Zubereitung');
+
+
+        $this->loadModel('Kategorie');
+        $kategorien = $this->Kategorie->find();
+        $kategorien_as_array = [];
+
+        foreach ($kategorien as $kategorie) {
+            if (!isset($kategorien_as_array[$kategorie->id])) $kategorien_as_array[$kategorie->id] = $kategorie->name;
+            continue;
+        }
+
         if ($this->request->is(['patch', 'post', 'put'])) {
             $information = $this->Information->patchEntity($information, $this->request->getData());
             $save_information = $this->Information->save($information);
             if ($save_information) {
+
+                // Kategorie speichern
+                if ($this->request->getData('kategorie_id')>0) {
+                    $check_information_zu_kategorie = $this->InformationZuKategorie
+                        ->find()
+                        ->where(['information_id' => $save_information->id])
+                        ->first();
+                    if ($check_information_zu_kategorie) {
+                        $patched_check_information_zu_kategorie = $this->InformationZuKategorie->patchEntity($check_information_zu_kategorie, ['kategorie_id' => $this->request->getData('kategorie_id')]);
+                        $this->InformationZuKategorie->save($patched_check_information_zu_kategorie);
+                    } else {
+                        $new_information_zu_kategorie_entity_array = [
+                            'information_id' => $save_information->id,
+                            'kategorie_id' => $this->request->getData('kategorie_id')
+                        ];
+                        $new_information_zu_kategorie_entity = $this->InformationZuKategorie->newEntity($new_information_zu_kategorie_entity_array);
+                        $this->InformationZuKategorie->save($new_information_zu_kategorie_entity);
+                    }
+                }
 
                 // Alle Zutatenzuweisungen löschen
                 $zutaten_zu_information = $this->ZutatenZuInformation
@@ -239,8 +275,8 @@ class InformationController extends AppController
                 }
 
                 // Zutaten speichern
-                if (strlen($this->request->getData('zutaten_menge_1')>0) &&
-                    strlen($this->request->getData('zutaten_einheit_1')>0) &&
+                if (strlen($this->request->getData('zutaten_menge_1'))>0 &&
+                    strlen($this->request->getData('zutaten_einheit_1'))>0 &&
                     strlen($this->request->getData('zutaten_name_1'))>0) {
                     for ($i=1; $i<45; $i++) {
                         if (strlen($this->request->getData('zutaten_menge_' . $i))>0 &&
@@ -322,7 +358,7 @@ class InformationController extends AppController
                                     'titel' => $this->request->getData('zubereitung_titel_' . $i),
                                     'beschreibung' => $this->request->getData('zubereitung_beschreibung_' . $i)
                                 ];
-                                $new_zubereitung_entity = $this->Zubereitung->newEntity($new_zutat_zu_information_entity_array);
+                                $new_zubereitung_entity = $this->Zubereitung->newEntity($new_zubereitung_entity_array);
                                 $new_zubereitung = $this->Zubereitung->save($new_zubereitung_entity);
 
                                 $new_zubereitung_zu_information_entity_array = [
@@ -371,6 +407,14 @@ class InformationController extends AppController
             }
         }
         $information->zutaten = $zutaten;
+
+        $check_information_zu_kategorie = $this->InformationZuKategorie
+            ->find()
+            ->where(['information_id' => $information->id])
+            ->first();
+        if ($check_information_zu_kategorie) $information->kategorie_id = $check_information_zu_kategorie->kategorie_id;
+
+        $this->set('kategorien', $kategorien_as_array);
 
         $this->set(compact('information'));
         $this->set('_serialize', ['information']);
